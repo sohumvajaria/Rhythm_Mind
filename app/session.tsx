@@ -23,6 +23,10 @@ import {
   type ExerciseInstance,
   type ExerciseType,
 } from '../lib/exercises';
+import {
+  useSessionStore,
+  type ExerciseSessionResult,
+} from '../store/sessionStore';
 
 // ─── session config ───────────────────────────────────────────────────────────
 
@@ -118,6 +122,11 @@ export default function SessionScreen() {
   const [activeBeat, setActiveBeat]     = useState(-1);
   const [blendLabel, setBlendLabel]     = useState<'A' | 'B' | null>(null);
 
+  const { recordSession } = useSessionStore();
+
+  // Accumulates one entry per exercise; flushed to the store when the session ends.
+  const sessionResultsRef = useRef<ExerciseSessionResult[]>([]);
+
   const tapPadRef       = useRef<TapPadHandle>(null);
   const audioTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -210,6 +219,7 @@ export default function SessionScreen() {
     setActiveBeat(-1);
 
     if (isLastExercise) {
+      recordSession(sessionResultsRef.current);
       router.replace({
         pathname: '/summary',
         params: {
@@ -221,14 +231,22 @@ export default function SessionScreen() {
       setExerciseIndex((i) => i + 1);
       transitionTo('instruction');
     }
-  }, [isLastExercise, clearAllTimers, transitionTo]);
+  }, [isLastExercise, clearAllTimers, transitionTo, recordSession]);
 
   const handleSequenceComplete = useCallback((result: TapResult) => {
     if (tapTimeoutRef.current) { clearTimeout(tapTimeoutRef.current); tapTimeoutRef.current = null; }
+
+    // Record this exercise's outcome for the session store.
+    sessionResultsRef.current.push({
+      type:       exercises[exerciseIndex].type,
+      score:      result.score,
+      difficulty: SESSION_PLAN[exerciseIndex].difficulty,
+    });
+
     setLastResult(result);
     transitionTo('feedback');
     feedbackTimerRef.current = setTimeout(advanceExercise, FEEDBACK_LINGER_MS);
-  }, [transitionTo, advanceExercise]);
+  }, [transitionTo, advanceExercise, exercises, exerciseIndex]);
 
   // ── render ─────────────────────────────────────────────────────────────────
 

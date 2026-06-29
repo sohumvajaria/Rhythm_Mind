@@ -1,9 +1,9 @@
-import { File, Paths } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { shareNote, type ShareResult } from '../lib/shareNote';
 
 // ─── colours ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +38,12 @@ function formatNoteDate(d: Date): string {
   });
 }
 
+function confirmationLabel(result: ShareResult): string {
+  if (result === 'copied') return 'Note copied to clipboard';
+  if (result === 'shared') return 'Sent!';
+  return 'Sharing not available on this device';
+}
+
 // ─── screen ───────────────────────────────────────────────────────────────────
 
 export default function SummaryScreen() {
@@ -60,31 +66,23 @@ export default function SummaryScreen() {
     [noteDate, exerciseCount, avgDifficulty],
   );
 
-  const [sharing, setSharing] = useState(false);
+  const [busy, setBusy]             = useState(false);
+  const [confirmation, setConf]     = useState<string | null>(null);
 
-  // Write note to a cache file and share via expo-sharing's native share sheet.
-  // expo-sharing.shareAsync expects a file URI, not a bare text string, so we
-  // write a .txt file first. The caregiver can forward it via any messaging app
-  // or email from the native share sheet.
+  // Platform-specific sharing via lib/shareNote.{web,native}.ts.
+  // On web: Web Share API → clipboard fallback.
+  // On native: expo-sharing (writes a .txt file to cache).
   const handleShare = useCallback(async () => {
-    if (sharing) return;
-    setSharing(true);
+    if (busy) return;
+    setBusy(true);
+    setConf(null);
     try {
-      const available = await Sharing.isAvailableAsync();
-      if (!available) return;
-
-      const file = new File(Paths.cache, 'rhythmmind-session-note.txt');
-      if (!file.exists) file.create();
-      file.write(note);
-      await Sharing.shareAsync(file.uri, {
-        mimeType:    'text/plain',
-        UTI:         'public.plain-text',
-        dialogTitle: 'Send session note to caregiver',
-      });
+      const result = await shareNote(note);
+      setConf(confirmationLabel(result));
     } finally {
-      setSharing(false);
+      setBusy(false);
     }
-  }, [note, sharing]);
+  }, [note, busy]);
 
   return (
     <SafeAreaView style={s.screen}>
@@ -120,15 +118,20 @@ export default function SummaryScreen() {
           <Text style={s.noteBody}>{note}</Text>
         </View>
 
+        {/* ── confirmation message ── */}
+        {confirmation ? (
+          <Text style={s.confirmation}>{confirmation}</Text>
+        ) : null}
+
         {/* ── share button ── */}
         <Pressable
-          style={[s.btnShare, sharing && s.btnShareDisabled]}
+          style={[s.btnShare, busy && s.btnShareDisabled]}
           onPress={handleShare}
-          disabled={sharing}
+          disabled={busy}
           accessibilityRole="button"
           accessibilityLabel="Share session note with caregiver"
         >
-          {sharing ? (
+          {busy ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={s.btnShareText}>Share with caregiver</Text>
@@ -241,7 +244,7 @@ const s = StyleSheet.create({
     borderRadius: 20,
     padding: 22,
     width: '100%',
-    marginBottom: 32,
+    marginBottom: 20,
   },
   noteLabel: {
     fontSize: 18,
@@ -256,6 +259,15 @@ const s = StyleSheet.create({
     fontWeight: '400',
     color: C.primary,
     lineHeight: 30,
+  },
+
+  // share confirmation
+  confirmation: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: C.green,
+    textAlign: 'center',
+    marginBottom: 12,
   },
 
   // share button
