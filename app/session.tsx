@@ -40,7 +40,11 @@ const SESSION_PLAN: Array<{ type: ExerciseType; difficulty: number }> = [
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'instruction' | 'playing' | 'tapping' | 'feedback' | 'complete';
+type Phase = 'instruction' | 'playing' | 'tapping' | 'feedback';
+
+const AVG_DIFFICULTY = Math.round(
+  SESSION_PLAN.reduce((sum, p) => sum + p.difficulty, 0) / SESSION_LENGTH,
+);
 
 interface Instruction {
   title: string;
@@ -206,7 +210,13 @@ export default function SessionScreen() {
     setActiveBeat(-1);
 
     if (isLastExercise) {
-      transitionTo('complete');
+      router.replace({
+        pathname: '/summary',
+        params: {
+          exerciseCount: String(SESSION_LENGTH),
+          avgDifficulty: String(AVG_DIFFICULTY),
+        },
+      });
     } else {
       setExerciseIndex((i) => i + 1);
       transitionTo('instruction');
@@ -222,7 +232,7 @@ export default function SessionScreen() {
 
   // ── render ─────────────────────────────────────────────────────────────────
 
-  const progressPct = phase === 'complete' ? 100 : (exerciseIndex / SESSION_LENGTH) * 100;
+  const progressPct = (exerciseIndex / SESSION_LENGTH) * 100;
   const feedback = lastResult ? getFeedback(lastResult) : null;
   const isGood = feedback === 'Good';
 
@@ -247,11 +257,9 @@ export default function SessionScreen() {
       </View>
 
       {/* ── exercise counter ── */}
-      {phase !== 'complete' && (
-        <Text style={styles.counter}>
-          Exercise {exerciseIndex + 1} of {SESSION_LENGTH}
-        </Text>
-      )}
+      <Text style={styles.counter}>
+        Exercise {exerciseIndex + 1} of {SESSION_LENGTH}
+      </Text>
 
       {/* ── fading content area ── */}
       <Animated.View style={[styles.content, fadeStyle]}>
@@ -307,19 +315,6 @@ export default function SessionScreen() {
               <Text style={styles.btnSecondaryText}>
                 {isLastExercise ? 'Finish' : 'Next'}
               </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* complete */}
-        {phase === 'complete' && (
-          <View style={styles.centred}>
-            <Text style={styles.completeTitle}>Session complete</Text>
-            <Text style={styles.completeBody}>
-              Well done — you have finished today's rhythm session.
-            </Text>
-            <Pressable style={styles.btnPrimary} onPress={() => router.replace('/')}>
-              <Text style={styles.btnPrimaryText}>Done</Text>
             </Pressable>
           </View>
         )}
@@ -492,20 +487,4 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // complete
-  completeTitle: {
-    fontSize: 38,
-    fontWeight: '800',
-    color: C.primary,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  completeBody: {
-    fontSize: 22,
-    fontWeight: '400',
-    color: C.muted,
-    textAlign: 'center',
-    lineHeight: 32,
-    paddingHorizontal: 8,
-  },
 });
